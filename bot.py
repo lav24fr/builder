@@ -4,7 +4,7 @@ from navigation import Arena, Navigator
 
 
 class Bot:
-    name = "Circuit-A"
+    name = "Circuit-E"
 
     def __init__(self, hello):
         self.config = hello["config"]
@@ -18,7 +18,9 @@ class Bot:
         scale = max(me["stats"]["radius"]/self.config["mech"]["radius"],
                     me["stats"]["height"]/self.config["mech"]["height"])
         goal = zone["next_center"]
-        move = self.nav.move(pos, goal, scale, obs["t"])
+        # Leave room for deceleration and the grid's waypoint tolerance.
+        arrival_radius = max(0, zone["next_radius"] - self.arena.step - me["stats"]["radius"])
+        move = self.nav.move(pos, goal, scale, obs["t"], arrival_radius)
         yaw = math.atan2(move[1], move[0]) if any(move) else me["aim"][0]
         remaining = zone["shrink_end"] - obs["t"]
         outside_next = math.dist(pos[:2], zone["next_center"]) > zone["next_radius"]

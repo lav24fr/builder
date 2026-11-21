@@ -147,22 +147,26 @@ class Navigator:
         self.blocked = None
         self.remaining = 0
 
-    def search(self, start, goal, scale):
+    def search(self, start, center, radius, point_node, scale):
         arena = self.arena
         xy = arena.xy
         queue = [(0, 0, start)]
         parent = {start: None}
         cost = {start: 0}
         nearest = start
-        nearest_dist = math.dist(xy[start], xy[goal])
+        target = center if radius else xy[point_node]
+        nearest_dist = math.dist(xy[start], target)
+        arrived = False
         while queue:
             _, g, n = heappop(queue)
             if g != cost[n]:
                 continue
-            h = math.dist(xy[n], xy[goal])
+            h = math.dist(xy[n], target)
             if h < nearest_dist:
                 nearest, nearest_dist = n, h
-            if n == goal:
+            if (radius and h <= radius) or (not radius and n == point_node):
+                nearest = n
+                arrived = True
                 break
             for other, length, clearance in arena.edges[n]:
                 if clearance < scale or other == self.blocked:
@@ -170,18 +174,27 @@ class Navigator:
                 ng = g + length
                 if ng < cost.get(other, math.inf):
                     cost[other], parent[other] = ng, n
-                    heappush(queue, (ng + 1.12*math.dist(xy[other], xy[goal]), ng, other))
+                    distance_left = max(0, math.dist(xy[other], target) - radius)
+                    heappush(queue, (ng + 1.12*distance_left, ng, other))
             yield
         n = nearest
-        self.failed = n != goal
+        self.failed = not arrived
+        self.end_node = nearest
         while parent[n] is not None:
             self.path.appendleft(n)
             n = parent[n]
         self.remaining = cost[nearest]
 
-    def move(self, pos, goal, scale, now):
+    def move(self, pos, goal, scale, now, arrival_radius=0):
         arena = self.arena
-        key = (tuple(goal), scale)
+        distance = math.dist(pos[:2], goal)
+        if arrival_radius > 0 and distance <= arrival_radius:
+            self.key = None
+            self.path.clear()
+            self.job = None
+            self.remaining = 0
+            return [0, 0]
+        key = (tuple(goal), scale, arrival_radius)
         if self.key != key:
             self.blocked = None
         elif self.progress_pos is not None and now - self.progress_at >= 1.4:
@@ -194,10 +207,11 @@ class Navigator:
         if key != self.key:
             self.key = key
             self.path.clear()
-            a, b = arena.nearest(pos, scale), arena.nearest(goal, scale)
-            self.failed = a is None or b is None
-            self.job = None if self.failed else self.search(a, b, scale)
-            self.remaining = math.dist(pos[:2], goal)
+            a = arena.nearest(pos, scale)
+            b = None if arrival_radius else arena.nearest(goal, scale)
+            self.failed = a is None or (arrival_radius == 0 and b is None)
+            self.job = None if self.failed else self.search(a, goal, arrival_radius, b, scale)
+            self.remaining = max(0, distance-arrival_radius)
             self.end_node = b
         if self.job is not None:
             deadline = time.perf_counter() + 0.002
@@ -215,7 +229,7 @@ class Navigator:
             dest = arena.xy[self.path[0]]
         elif self.job is None and not self.failed and self.end_node is not None:
             end = arena.xy[self.end_node]
-            dest = goal if math.dist(end, goal) <= arena.step*0.71 else end
+            dest = goal if not arrival_radius and math.dist(end, goal) <= arena.step*0.71 else end
         else:
             return [0, 0]
         dx, dy = dest[0]-pos[0], dest[1]-pos[1]
