@@ -2,7 +2,9 @@
 from array import array
 from collections import deque
 from heapq import heappop, heappush
+import hashlib
 import json
+import zlib
 import math
 from pathlib import Path
 import sys
@@ -31,10 +33,12 @@ class Arena:
 
     def __init__(self, directory, mech):
         folder = Path(directory) / "v2"
-        world = json.loads((folder / "world.json").read_bytes())
+        world_bytes = (folder / "world.json").read_bytes()
+        world = json.loads(world_bytes)
         self.terrain = world["terrain"]
         self.samples = array("h")
-        self.samples.frombytes((folder / self.terrain["file"]).read_bytes())
+        heights = (folder / self.terrain["file"]).read_bytes()
+        self.samples.frombytes(heights)
         if sys.byteorder != "little":
             self.samples.byteswap()
         b = world["bounds"]
@@ -43,6 +47,16 @@ class Arena:
         self.height = int((b["maxY"] - self.y0) / self.step) + 1
         self.xy = [(self.x0 + i * self.step, self.y0 + j * self.step)
                    for j in range(self.height) for i in range(self.width)]
+        # Bind the baked graph to the actual mounted map and live traversal rules.
+        signature = [self.step, mech["radius"], mech["height"], mech["step_up"], mech["max_slope_deg"]]
+        self.fingerprint = hashlib.sha256(world_bytes + heights + json.dumps(signature).encode()).hexdigest()
+        cache = Path(__file__).with_name("ground-grid.zlib")
+        if cache.is_file():
+            data = json.loads(zlib.decompress(cache.read_bytes()))
+            if data["fingerprint"] == self.fingerprint:
+                self.z, self.clearance, self.edges = data["z"], data["clearance"], data["edges"]
+                self.solids = {int(n): spans for n, spans in data["solids"].items()}
+                return
         self.z = [self.ground(x, y) for x, y in self.xy]
         self.clearance = [min(x-self.x0, y-self.y0, b["maxX"]-x, b["maxY"]-y) / mech["radius"]
                           for x, y in self.xy]
