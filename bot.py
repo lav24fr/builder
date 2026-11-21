@@ -1,15 +1,17 @@
 import math
 import mechfight as mf
 from navigation import Arena, Navigator
+from equipment import Equipment
 
 
 class Bot:
-    name = "Circuit-A"
+    name = "Circuit-C"
 
     def __init__(self, hello):
         self.config = hello["config"]
         self.arena = Arena(hello["map"]["dir"], self.config["mech"])
         self.nav = Navigator(self.arena)
+        self.equipment = Equipment(self.arena, self.config)
 
     def act(self, obs):
         me = obs["self"]
@@ -26,16 +28,7 @@ class Bot:
         action = {"move": move, "aim": [yaw, 0], "boost": not me["in_zone"] or hurry}
         if obs["offer"]:
             action["pick"] = 0
-        pickups = [p for p in obs["pickups"] if p["kind"] != "gun"
-                   and math.dist(p["pos"][:2], pos[:2]) < self.config["loot"]["pickup_radius"]]
-        if me["weapons"][1] is None and pickups:
-            action["take"] = pickups[0]["id"]
-        enemies = [m for m in obs["mechs"] if m["kind"] == "mech"]
-        if enemies:
-            target = min(enemies, key=lambda m: math.dist(m["pos"], pos))["pos"]
-            action["aim"] = [math.atan2(target[1]-pos[1], target[0]-pos[0]),
-                             math.atan2(target[2]-pos[2]-2.5, math.dist(pos[:2], target[:2]))]
-            action["fire"] = [True, True]
+        self.equipment.apply(action, obs, None)
         return action
 
 
