@@ -25,6 +25,7 @@ class Objectives:
         self.arena = arena
         self.config = config
         self.item = None
+        self.recovering = False
         self.avoid_until = {}
 
     def options(self, obs):
@@ -33,19 +34,42 @@ class Objectives:
         return [("cube", obj, 0) for obj in obs["cubes"]] + [
             ("crate", obj, 2.5) for obj in obs["crates"]]
 
+    def drop_options(self, obs):
+        me = obs["self"]
+        result = []
+        for drop in obs["drops"]:
+            if drop["holder"] not in (None, me["id"]):
+                continue
+            if any(m["kind"] == "mech" and math.dist(m["pos"][:2], drop["pos"][:2]) <= drop["radius"]
+                   for m in obs["mechs"]):
+                continue
+            travel = math.dist(me["pos"][:2], drop["pos"][:2]) / me["stats"]["walk_speed"]
+            if drop["lands_in"] > travel + 2:
+                continue
+            progress = drop["progress"] if drop["holder"] == me["id"] else 0
+            wait = max(0, drop["lands_in"]-travel) + max(0, drop["capture_s"]-progress)
+            result.append(("drop", drop, wait))
+        return result
+
     def choose(self, obs, nav, scale):
         now = obs["t"]
         pos = obs["self"]["pos"]
+        hp_fraction = obs["self"]["hp"] / obs["self"]["max_hp"]
+        self.recovering = hp_fraction < (0.90 if self.recovering else 0.60)
         previous = self.item
         self.item = None
         if not obs["self"]["in_zone"]:
             return
         self.avoid_until = {k:v for k,v in self.avoid_until.items() if v > now}
         choices = []
-        for kind, obj, wait in self.options(obs):
+        options = self.drop_options(obs)
+        if not self.recovering:
+            options.extend(self.options(obs))
+        for kind, obj, wait in options:
             p = obj["pos"]
             d = math.dist(pos[:2], p[:2])
-            if d > 45 or obj["id"] in self.avoid_until:
+            limit = 85 if kind == "drop" else 45
+            if d > limit or obj["id"] in self.avoid_until:
                 continue
             if abs(p[2]-self.arena.ground(*p[:2])) > 3.5:
                 continue
@@ -59,9 +83,11 @@ class Objectives:
                     continue
                 if nav.job is None:
                     estimate = max(d, nav.remaining)
-            if estimate > 60 or not enough_time(obs, p, estimate, wait):
+            if estimate > limit*1.4 or not enough_time(obs, p, estimate, wait):
                 continue
             rank = d + wait*4 - (6 if previous and previous[1]["id"] == obj["id"] else 0)
+            if kind == "drop" and (self.recovering or obj["holder"] == obs["self"]["id"]):
+                rank -= 40
             choices.append((rank, obj["id"], kind, obj))
         if choices:
             _, _, kind, obj = min(choices)
