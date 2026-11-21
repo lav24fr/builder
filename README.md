@@ -11,3 +11,18 @@ python3 ../mechfight-kit/check/check.py --map-dir /arena -- docker run --rm -i -
 ```
 
 Candidate A tests obstacle-aware ground navigation with the starter equipment policy. The checker replays observations. Official matches determine placement.
+
+## Practice rounds
+
+| Git tag | Change to compare |
+| --- | --- |
+| round-a | Ground routes and recovery after stalled movement, with the starter equipment policy |
+| round-b | Short detours for early cubes or crates and ranked upgrade choices |
+| round-c | Stateful arm-gun and lightning controls with reload and visibility checks |
+| round-d | Health recovery and uncontested supply drops |
+
+Use the full commit ID from `git rev-parse round-a` (or the relevant round) in the submission form. Record the result and current qualification line after each 48-match batch. When a change lowers the score, branch from the better round and cherry-pick the next policy change, resolving the equipment and objective hooks against that base before testing. Round C and D currently include the earlier candidates’ features.
+
+The ground-grid cache is generated from the public starter arena. Startup checks the mounted files and movement config against its fingerprint. A different map or rule set triggers an in-memory rebuild. To regenerate it locally, run `python3 tools/bake.py ../mechfight-kit`.
+
+Run policy scenarios using `python3 -m unittest discover -s tests -v`. Set MECHFIGHT_KIT when the supplied kit is in a different directory.

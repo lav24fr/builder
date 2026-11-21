@@ -16,6 +16,6 @@ if __name__ == "__main__":
     kit = parser.parse_args().kit
     with gzip.open(kit/"check/stream.jsonl.gz", "rt") as f:
         mech = json.loads(next(f))["config"]["mech"]
-    arena = Arena(kit/"arena", mech)
+    arena = Arena(kit/"arena", mech, load_cache=False)
     data = {key: getattr(arena, key) for key in ("fingerprint", "z", "clearance", "edges", "solids")}
     (root/"ground-grid.zlib").write_bytes(zlib.compress(json.dumps(data,separators=(",",":")).encode(), 6))

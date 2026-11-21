@@ -31,7 +31,7 @@ def ring_distance(x, y, ring):
 class Arena:
     step = 6
 
-    def __init__(self, directory, mech):
+    def __init__(self, directory, mech, *, load_cache=True):
         folder = Path(directory) / "v2"
         world_bytes = (folder / "world.json").read_bytes()
         world = json.loads(world_bytes)
@@ -51,7 +51,7 @@ class Arena:
         signature = [self.step, mech["radius"], mech["height"], mech["step_up"], mech["max_slope_deg"]]
         self.fingerprint = hashlib.sha256(world_bytes + heights + json.dumps(signature).encode()).hexdigest()
         cache = Path(__file__).with_name("ground-grid.zlib")
-        if cache.is_file():
+        if load_cache and cache.is_file():
             data = json.loads(zlib.decompress(cache.read_bytes()))
             if data["fingerprint"] == self.fingerprint:
                 self.z, self.clearance, self.edges = data["z"], data["clearance"], data["edges"]
